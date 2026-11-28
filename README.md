@@ -1,13 +1,17 @@
 # World Cup 2027
 
-iPad 横屏离线足球游戏 · 0.2.1
+iPad 横屏离线足球游戏 · 0.2.2
 
 ## 下载
 
-- [直接下载 v0.2.1 IPA](https://github.com/haahhushs-alt/World-Cup-2027/raw/refs/heads/main/downloads/WorldCup2027-v0.2.1.ipa)
+- [直接下载 v0.2.2 IPA](https://github.com/haahhushs-alt/World-Cup-2027/raw/refs/heads/main/downloads/WorldCup2027-v0.2.2.ipa)
 - [下载 v0.2 ZIP 压缩包](https://github.com/haahhushs-alt/World-Cup-2027/raw/refs/heads/main/downloads/WorldCup2027-download.zip)
 
 请使用 Safari 打开下载链接。IPA 未签名，需要通过自己的签名方式安装到 iPad。
+
+## v0.2.2 更新
+
+可以在接球前预先按传球或射门，触球时立即出球。进球回放固定从对应球门后方播放。
 
 ## v0.2.1 更新
 

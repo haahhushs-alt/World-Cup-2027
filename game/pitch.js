@@ -406,7 +406,13 @@
         this.viewHeading+=Math.atan2(Math.sin(heading-this.viewHeading),Math.cos(heading-this.viewHeading))*smoothing(7,dt);
         const a=this.viewHeading;eye.set(p.x,1.65,p.z);aim.set(p.x+Math.cos(a)*8,1.04,p.z+Math.sin(a)*8);fov=78;
       }else if(mode==='goal'){const a=star.heading+.5+(opts.stageTime||0)*.33;eye.set(star.x+4.6*Math.cos(a),1.42,star.z+4.6*Math.sin(a));aim.set(star.x,1.03,star.z);fov=39;
-      }else if(mode==='replay'){const s=b.x>=0?1:-1;eye.set(s*49,6.9,Math.sign(b.z||1)*18);aim.set(b.x,Math.max(.85,b.y),b.z);fov=49;
+      }else if(mode==='replay'){
+        const goalSide=opts.replaySide||1;
+        const travel=clamp((opts.stageTime||0)/5,0,1);
+        const lookX=clamp(b.x*goalSide,27,46);
+        eye.set(goalSide*62,4.8+travel*.8,goalSide*(6.5-travel*2.8));
+        aim.set(goalSide*lookX,Math.max(.85,b.y*.65),clamp(b.z*.44,-8,8));
+        fov=54;
       }else{
         const direction=opts.direction||1;
         const leadX=clamp(b.vx*.28,-5,5);

@@ -20,7 +20,7 @@ function draw(now){
  if(sim.phase==='halftime'||sim.phase==='fulltime'){paused=true;WC.sound.modeTo('pause');WC.matchUI.show(false);controls.show(false);(sim.phase==='halftime'?WC.Menu.showHalf:WC.Menu.showResult)(sim);return;}
  WC.sound.update(sim,dt);WC.matchUI.update(sim,dt);
  const view=['goal','replay'].includes(sim.phase)?sim.phase:camera;
- pitch.render(sim.frame,dt,{camera:view,direction:sim.attackDir(0),stageTime:sim.stageTime,scorer:sim.scorer?.id});elapsed+=dt;
+ pitch.render(sim.frame,dt,{camera:view,direction:sim.attackDir(0),stageTime:sim.stageTime,replaySide:view==='replay'?sim.attackDir(sim.scoring):null,scorer:sim.scorer?.id});elapsed+=dt;
  if(elapsed>.065){controls.update(sim,{home:options.homeTeam.abbr,away:options.awayTeam.abbr,camera});elapsed=0;}
 }
 document.addEventListener('visibilitychange',()=>{if(document.hidden)WC.pause();});requestAnimationFrame(draw);

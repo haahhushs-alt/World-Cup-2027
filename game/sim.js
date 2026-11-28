@@ -109,6 +109,7 @@
       if(!interval&&this.lastWindow[team]!==this.restartSerial){this.windows[team]++;this.lastWindow[team]=this.restartSerial;}this.pending[team]=[];
     }
     setRestart(type,team,x,z){
+      this.queuedKick=null;
       if(this.mode!=='match' && this.phase==='live' && this.practiceTime>0){
         this.endPracticeAttempt('本轮结束');return;
       }
@@ -186,6 +187,11 @@
       if(p.team===0)this.chooseControl(p);
       if(settle)this.emit('receive','接球',{player:p.id,team:p.team});
       this.syncBall(p);
+      const queued=this.queuedKick;
+      this.queuedKick=null;
+      if(settle&&queued?.player===p.id&&queued.until>=this.elapsed){
+        this.action(queued.kind,queued.power);
+      }
     }
     syncBall(p){
       const b=this.ball,speed=len(p.vx,p.vz),stride=Math.sin(this.elapsed*(5+speed*.8));
@@ -210,13 +216,19 @@
       }
       if(this.phase!=='live')return false;
       const p=this.selected;
-      if(kind==='switch'){this.manualSwitch=1.8;const options=this.playerList(0).filter(q=>q.id!==p.id&&!q.keeper).sort((a,c)=>distance(a,this.ball)-distance(c,this.ball));
+      if(kind==='switch'){this.queuedKick=null;this.manualSwitch=1.8;const options=this.playerList(0).filter(q=>q.id!==p.id&&!q.keeper).sort((a,c)=>distance(a,this.ball)-distance(c,this.ball));
         if(this.ball.owner===p.id)return false;this.chooseControl(options[0]);return true;}
       if(kind==='sprint'||kind==='tackle'){
         this.sprintBurst=.4;
         if(this.ball.owner!==p.id)this.tryTackle(p,true);return true;
       }
-      if(this.ball.owner!==p.id)return false;
+      if(this.ball.owner!==p.id){
+        if(KICKS.has(kind)&&this.ball.owner===null&&this.kickData?.target===p.id&&this.kickData.team===0){
+          this.queuedKick={player:p.id,kind,power,until:this.elapsed+.38};
+          return true;
+        }
+        return false;
+      }
       if(kind==='fake'||SKILLS.has(kind)) {
         if(p.skillTime>0)return false;
         const sign=['skillLeft','dragBack'].includes(kind)?-1:1;
@@ -392,7 +404,7 @@
     goal(team){this.score[team]++;this.scoring=team;const last=this.players[this.lastTouch];this.scorer=last?.team===team?last:this.nearest(team,this.ball.x,this.ball.z);if(this.scorer)this.scorer.goals++;
       if(this.mode!=='match'&&team===0)this.practice.goals++;
       this.capture();this.phase='goal';this.stageTime=0;this.emit('goal','进球',{team,player:this.scorer?.id});}
-    startReplay(){this.phase='replay';this.stageTime=0;this.replayView=this.replayFrames[0];}
+    startReplay(){this.queuedKick=null;this.phase='replay';this.stageTime=0;this.replayView=this.replayFrames[0];}
     sampleReplay(position){
       const i=Math.floor(position),a=this.replayFrames[i],b=this.replayFrames[i+1]||a,f=position-i;
       this.replayView={controlled:a.controlled,ball:{...a.ball},players:a.players.map(p=>({...p}))};
