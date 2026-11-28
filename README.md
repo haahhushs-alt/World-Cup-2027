@@ -1,15 +1,19 @@
 # World Cup 2027
 
-iPad 横屏离线足球游戏 · 0.2.0
+iPad 横屏离线足球游戏 · 0.2.1
 
 ## 下载
 
-- [直接下载 v0.2 IPA](https://github.com/haahhushs-alt/World-Cup-2027/raw/refs/heads/main/downloads/WorldCup2027-v0.2.ipa)
-- [下载 ZIP 压缩包](https://github.com/haahhushs-alt/World-Cup-2027/raw/refs/heads/main/downloads/WorldCup2027-download.zip)
+- [直接下载 v0.2.1 IPA](https://github.com/haahhushs-alt/World-Cup-2027/raw/refs/heads/main/downloads/WorldCup2027-v0.2.1.ipa)
+- [下载 v0.2 ZIP 压缩包](https://github.com/haahhushs-alt/World-Cup-2027/raw/refs/heads/main/downloads/WorldCup2027-download.zip)
 
 请使用 Safari 打开下载链接。IPA 未签名，需要通过自己的签名方式安装到 iPad。
 
-## 本次更新
+## v0.2.1 更新
+
+接球时，球在约 0.18 秒内从触球点过渡到脚边，并播放轻触球音效。转播镜头会根据球速和进攻方向提前跟进。
+
+## v0.2 更新
 
 15组原创合成音频包含观众底噪、助威、触球、射门、抢断、扑救、脚步、落地、门框、哨声、终场哨、音乐与界面反馈。声音保存在安装包中，离线可用。在设置或暂停菜单中分别调节总音量、观众、比赛音效和音乐。
 

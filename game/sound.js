@@ -44,6 +44,7 @@
    else if(e.type==='save'){this.play('save',{pan});this.play('cheer',{bus:'crowd',volume:.2,rate:1.12});}
    else if(e.type==='post'){this.play('post',{pan});this.play('cheer',{bus:'crowd',volume:.35,rate:.9});}
    else if(e.type==='card')this.play('whistle',{volume:.65});
+   else if(e.type==='receive')this.play('pass',{pan,volume:.27,rate:1.14});
    else if(e.type==='tackle')this.play('tackle',{pan,volume:.55});
    else if(e.type==='bounce')this.play('bounce',{pan,volume:Math.min(.5,e.impact/12)});
   }

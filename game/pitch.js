@@ -407,8 +407,15 @@
         const a=this.viewHeading;eye.set(p.x,1.65,p.z);aim.set(p.x+Math.cos(a)*8,1.04,p.z+Math.sin(a)*8);fov=78;
       }else if(mode==='goal'){const a=star.heading+.5+(opts.stageTime||0)*.33;eye.set(star.x+4.6*Math.cos(a),1.42,star.z+4.6*Math.sin(a));aim.set(star.x,1.03,star.z);fov=39;
       }else if(mode==='replay'){const s=b.x>=0?1:-1;eye.set(s*49,6.9,Math.sign(b.z||1)*18);aim.set(b.x,Math.max(.85,b.y),b.z);fov=49;
-      }else{const x=clamp(.68*b.x+.32*p.x,-42,42),z=clamp(.64*b.z+.36*p.z,-29,29);
-        eye.set(x*.95,20.5,z*.42+32.5);aim.set(x,.35,z*.75-.6);}
+      }else{
+        const direction=opts.direction||1;
+        const leadX=clamp(b.vx*.28,-5,5);
+        const leadZ=clamp(b.vz*.18,-2.5,2.5);
+        const x=clamp(.68*b.x+.32*p.x+direction*2.4+leadX,-43,43);
+        const z=clamp(.64*b.z+.36*p.z+leadZ,-29,29);
+        eye.set(x*.95,20.5,z*.42+32.5);
+        aim.set(x,.35,z*.75-.6);
+      }
       const smooth=mode!==this.lastMode?1:smoothing(mode==='first'?25:6.8,dt);this.lastMode=mode;
       this.camera.position.lerp(eye,smooth);this.look.lerp(aim,smooth);this.camera.lookAt(this.look);
       if(this.camera.fov!==fov){this.camera.fov=fov;this.camera.updateProjectionMatrix();}

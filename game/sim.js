@@ -178,11 +178,13 @@
       if(rest.type==='throw'){p.anim='throw';p.animTime=.5;}
       return true;
     }
-    takeBall(p){
-      const b=this.ball;this.lastTouch=p.id;b.owner=p.id;b.vx=b.vy=b.vz=b.spin=0;
+    takeBall(p,settle=false){
+      const b=this.ball;
+      this.receiving=settle?{id:p.id,x:b.x,y:b.y,z:b.z}:null;this.lastTouch=p.id;b.owner=p.id;b.vx=b.vy=b.vz=b.spin=0;
       this.kickData=null;this.offside.clear();this.ownerTime=0;this.dribbleBeat=0;
       p.think=p.team===1?this.difficultySettings.reaction*(.55+this.random()*.6):.6;
       if(p.team===0)this.chooseControl(p);
+      if(settle)this.emit('receive','接球',{player:p.id,team:p.team});
       this.syncBall(p);
     }
     syncBall(p){
@@ -190,6 +192,14 @@
       const reach=p.keeper&&this.inBox(p,p.x,p.z)?.25:.48+Math.min(speed*.037,.28)+Math.max(0,stride)*.14;
       b.x=p.x+Math.cos(p.heading)*reach-Math.sin(p.heading)*stride*.065;b.z=p.z+Math.sin(p.heading)*reach+Math.cos(p.heading)*stride*.065;b.y=R+Math.abs(stride)*Math.min(.07,speed*.008);
       b.vx=p.vx;b.vz=p.vz;
+      const receive=this.receiving;
+      if(receive?.id===p.id){
+        const t=clip(this.ownerTime/.18,0,1),progress=1-(1-t)**2;
+        b.x=pick(receive.x,b.x,progress);
+        b.y=pick(receive.y,b.y,progress);
+        b.z=pick(receive.z,b.z,progress);
+        if(t>=1)this.receiving=null;
+      }
     }
     action(kind,power=.65){this.shotPower=clip(power,.4,1);if(kind==='pullback')kind='dragBack';
       if(kind==='skip'){if(this.phase==='goal')this.startReplay();else if(this.phase==='replay')this.afterGoal();
@@ -372,7 +382,7 @@
           if(this.random()>(p.team?this.difficultySettings.save:.75))continue;this.stats.saves[p.team]++;this.emit('save','门将扑救');}
         if(k?.restartType&&k.kicker===p.id){this.setRestart('indirect',1-p.team,p.x,p.z);return;}
         if(this.offside.has(p.id)){this.stats.offsides[p.team]++;this.setRestart('offside',1-p.team,p.x,p.z);return;}
-        this.takeBall(p);return;
+        this.takeBall(p,!goalie);return;
       }
     }
     capture(){
