@@ -133,7 +133,7 @@
         if(action==='sprint' && this.playerOwnsBall())this.dispatch('sprint');
         if(action==='stick' && [...this.fingers.values()].some(f=>f.action==='stick'))return;
         e.preventDefault(); el.setPointerCapture?.(e.pointerId);
-        const f={el,action,x:e.clientX,y:e.clientY,dir:'',radius:el.offsetWidth,def:action==='sprint'&&!this.playerOwnsBall()};
+        const f={el,action,started:performance.now(),x:e.clientX,y:e.clientY,dir:'',radius:el.offsetWidth,def:action==='sprint'&&!this.playerOwnsBall()};
         this.fingers.set(e.pointerId,f);
         el.classList.add('wc-pressed');
         if(action==='stick') this.moveStick(e,zone);
@@ -161,7 +161,7 @@
         if(f.action==='stick'){this.resetStick();return;}
         if(cancelled || f.action==='sprint') return;
         const act=f.dir ? gestures[f.action]?.[f.dir] : f.action;
-        if(act){this.dispatch(act);if(f.dir)this.notify(names[act],800);}
+        if(act){this.dispatch(act,f.action==='shoot'?Math.min(1,.48+(performance.now()-f.started)/1400):.65);if(f.dir)this.notify(names[act],800);}
       };
       pointer('pointerup',e=>release(e,false));
       pointer('pointercancel',e=>release(e,true));
@@ -191,14 +191,15 @@
       if(down){this.keys.add(e.code);this.pressMethod('keyboard');if(!e.repeat&&action)this.dispatch(action);}
       else this.keys.delete(e.code);
     }
-    dispatch(action) {
+    dispatch(action,power=.65) {
       if(!this.visible || this.dialog || !action) return;
+      if(this.sim?.players[this.sim.ball.owner]?.team===1){if(action==='shoot')action='tackle';else if(action==='pass')action='switch';}
       if(action==='pause') this.cb.pause?.();
       else if(action==='camera') this.cb.camera?.();
       else if(action==='tactic'){
         const keys=['defend','balanced','attack'];
         const next=keys[(keys.indexOf(this.sim?.tactic||'balanced')+1)%3];this.cb.tactic?.(next);this.notify('战术 · '+tactics[next]);
-      } else this.cb.action?.(action);
+      } else this.cb.action?.(action,power);
     }
     playerOwnsBall(){return this.sim?.ball?.owner===this.sim?.controlled;}
     profile() {
@@ -315,6 +316,9 @@
       const p=sim.players[sim.controlled],tag=r['player-tag'];
       if(p){set(tag.firstElementChild,String(p.number||''));set(tag.lastElementChild,p.name||'');}
       set(this.$('[data-touch="sprint"] b'),this.playerOwnsBall()?'冲刺':'冲刺 / 断球');
+      const owner=sim.players[sim.ball.owner],defending=owner?.team===1;
+      set(this.$('[data-touch="shoot"] b'),defending?'抢断':'射门');
+      set(this.$('[data-touch="pass"] b'),defending?'切换':'传球');
       const phase=sim.phase;
       const label=phase==='goal'?['GOAL','进球！']:phase==='replay'?['REPLAY','进球回放']:null;
       const key=label?phase:'';

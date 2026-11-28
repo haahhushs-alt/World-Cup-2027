@@ -160,7 +160,7 @@
     ctx.fillStyle='#fafffc';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(name,258,49,width-37);
     const texture=new T.CanvasTexture(canvas);texture.colorSpace=T.SRGBColorSpace;
     const sprite=new T.Sprite(new T.SpriteMaterial({map:texture,transparent:true,depthTest:false,depthWrite:false,toneMapped:false}));
-    sprite.scale.set(4.45,.84,1);sprite.position.set(0,2.33,0);sprite.renderOrder=12;
+    sprite.scale.set(2.6,.49,1);sprite.position.set(0,2.33,0);sprite.renderOrder=12;
     return sprite;
   }
   const ringMat=new T.MeshBasicMaterial({color:0x63f0be,side:T.DoubleSide,transparent:true,opacity:.96,depthWrite:false,toneMapped:false});
@@ -261,7 +261,7 @@
         for(let l=0;l<3;l++)g.oval(foot,0,.019-l*.006,.055+l*.017,.026,.003,.004,'#e0e6da',8,3);
       }
       const tex=makeKit(number,this.name,kit,trim,team,keeper);
-      const material=new T.MeshStandardMaterial({map:tex,vertexColors:true,roughness:.79,metalness:.025});
+      const material=new T.MeshStandardMaterial({map:tex,vertexColors:true,roughness:.7,metalness:.015});
       const mesh=new T.SkinnedMesh(g.geometry(),material);this.mesh=mesh;
       mesh.add(this.hips);mesh.bind(new T.Skeleton(g.bones));mesh.frustumCulled=false;
       mesh.castShadow=true;mesh.receiveShadow=true;this.body.add(mesh);
@@ -298,6 +298,7 @@
       const k=clamp((t-this.kickStarted)/.44,0,1);
       const kick=k<.33?Math.sin(k/.33*Math.PI/2)*.68:Math.cos((k-.33)/.67*Math.PI/2)*.68-Math.sin((k-.33)/.67*Math.PI)*1.35;
       const idle=Math.sin(t*2+(this.seed%17));
+      this.body.position.y=celebrate?Math.max(0,Math.sin(t*4.8))*.12:0;
       if(rawDelta<0 || rawDelta>.3)this.cycle=t*(5+sp*.95)+(this.seed%17);
       this.cycle+=dt*(4.8+Math.min(sp,10)*1.09);
       const stride=Math.sin(this.cycle), bounce=(1-Math.abs(Math.cos(this.cycle)))*.034*run;
@@ -320,7 +321,7 @@
         if(dive) {arm.rotation.z=sign*(1.2+diveAmount*.8);fore.rotation.x=-.23;thigh.rotation.x=sign*.4;}
         if(throwing){arm.rotation.x=-2.62;arm.rotation.z=sign*.15;fore.rotation.x=-.86;}
         if(celebrate) {
-          arm.rotation.z=sign*(1.68+.25*Math.sin(t*4.8+sign));arm.rotation.x=-.32;
+          arm.rotation.z=sign*(this.number%2?1.15+.28*Math.sin(t*4.8+sign):2.1+.16*Math.sin(t*4.8));arm.rotation.x=-.36;
           fore.rotation.x=-.37;this.head.rotation.x=-.19;this.chest.rotation.z=Math.sin(t*3.3)*.045;
         }
       }

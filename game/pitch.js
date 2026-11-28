@@ -160,8 +160,8 @@
   }
   function fanAtlas() {
     const canvas = surface(1024, 100), c = canvas.getContext('2d'), rng = random(911);
-    const shirts = ['#e5e8d8','#d8b68e','#d25d55','#327779','#2e4e4b','#a8ca81','#e0bf71','#809cac',
-      '#182d33','#bcb9b4','#498f78','#e6e0d4','#29625f','#485364','#b47b70','#73a89a'];
+    const shirts = ['#a3b3c0','#6a747d','#754d4d','#365663','#253943','#435d5f','#82755c','#667383',
+      '#182d33','#697783','#325b5e','#94a7b1','#22454f','#3d4655','#746567','#447079'];
     const skins = ['#dfb491','#bd896f','#8e6251','#e2c7a6','#a47e64'];
     for (let i = 0; i < shirts.length; i++) {
       const x = i * 64;
@@ -214,7 +214,7 @@
         const section = Math.floor(u*16) % 4;
         const t=(rng()<.35 ? [5,10,0,2][section] : Math.floor(rng()*16))/16;
         uv.push(t,.004,t+1/16,.004,t+1/16,.995,t,.995);
-        const brightness = .53+rng()*.38+(rowIndex<12?.08:0);
+        const brightness = .38+rng()*.3+(rowIndex<12?.1:0);
         for(let k=0;k<4;k++) colors.push(brightness,brightness,brightness);
       }
     });
@@ -363,14 +363,16 @@
     constructor(canvas,options){
       this.options=options;this.canvas=canvas;this.scene=new THREE.Scene();
       this.renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
+      this.renderer.outputColorSpace=THREE.SRGBColorSpace;this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.12;
+      this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;
       this.renderer.setPixelRatio(Math.min(1.5,window.devicePixelRatio||1));
-      const scene=this.scene;scene.background=new THREE.Color('#a2bdc5');scene.fog=new THREE.FogExp2('#acbec2',.0032);
-      scene.add(new THREE.HemisphereLight(0xfff5df,0x93aa91,1.95));
-      const sun=new THREE.DirectionalLight(0xffeed1,2.2);sun.position.set(-35,65,-20);scene.add(sun);
+      const scene=this.scene;scene.background=new THREE.Color('#92a8bd');scene.fog=new THREE.FogExp2('#acbccc',.0021);
+      scene.add(new THREE.HemisphereLight(0xd7eaff,0x426347,1.35));
+      const sun=new THREE.DirectionalLight(0xffeed1,2.2);sun.position.set(-35,65,-20);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-72,right:72,top:60,bottom:-60,near:1,far:160});sun.shadow.bias=-.0004;sun.shadow.normalBias=.04;sun.shadow.radius=2;scene.add(sun);
       const grass=texture(grassCanvas());grass.anisotropy=Math.min(8,this.renderer.capabilities.getMaxAnisotropy());
       const plane=new THREE.Mesh(new THREE.PlaneGeometry(118,82),new THREE.MeshStandardMaterial({map:grass,roughness:1}));
-      plane.rotation.x=-Math.PI/2;scene.add(plane);bowl(scene);goal(scene,1);goal(scene,-1);flags(scene);
-      this.ball=matchBall();scene.add(this.ball);this.fx=confetti(scene);
+      plane.receiveShadow=true;plane.rotation.x=-Math.PI/2;scene.add(plane);bowl(scene);goal(scene,1);goal(scene,-1);flags(scene);
+      this.ball=matchBall();this.ball.castShadow=true;scene.add(this.ball);this.fx=confetti(scene);
       this.camera=new THREE.PerspectiveCamera(46,1,.08,240);this.look=new THREE.Vector3();this.models=[];
       this.shadow=new THREE.InstancedMesh(new THREE.PlaneGeometry(1.35,1.04),new THREE.MeshBasicMaterial({map:shadowStamp(),transparent:true,depthWrite:false}),23);
       this.official=null;
@@ -389,6 +391,7 @@
           this.models[q.id]=m;this.scene.add(m.root);}
         
         this.models[q.id].update({...q,time:this.time,speed:Math.hypot(q.vx,q.vz),heading:Math.PI/2-q.heading,selected:q.id===state.controlled,firstPerson:mode==='first',celebrate:q.team===star.team&&mode==='goal'});
+        if(mode==='goal'||mode==='replay')this.models[q.id].nameTag.visible=false;
         this.stamp.position.set(q.x+.14,q.active?.021:-5,q.z+.1);this.stamp.scale.set(1,1,1);this.stamp.updateMatrix();this.shadow.setMatrixAt(q.id,this.stamp.matrix);}
       this.stamp.position.set(b.x,.024,b.z);this.stamp.scale.setScalar(.31);this.stamp.updateMatrix();this.shadow.setMatrixAt(22,this.stamp.matrix);this.shadow.instanceMatrix.needsUpdate=true;
       if(!this.official){this.official=new WC.PlayerModel({name:'Referee',number:0,kitColor:'#dbe83d',trimColor:'#202726',shortsColor:'#202726',seed:227});this.scene.add(this.official.root);this.refX=-8;this.refZ=6;}
@@ -396,7 +399,7 @@
       if(dist>.01){this.refX+=dx/dist*step;this.refZ+=dz/dist*step;}
       this.official.update({x:this.refX,z:this.refZ,heading:Math.atan2(b.x-this.refX,b.z-this.refZ),speed,time:this.time,selected:false});
       this.ball.position.set(b.x,Math.max(.15,b.y),b.z);this.ball.rotation.z-=dt*b.vx;this.ball.rotation.x+=dt*b.vz;
-      const eye=new THREE.Vector3(),aim=new THREE.Vector3();let fov=46;
+      const eye=new THREE.Vector3(),aim=new THREE.Vector3();let fov=43;
       if(mode==='first'){
         const dir=opts.direction||1, heading=Math.atan2(-p.z*.75,dir*55-p.x);
         if(this.lastMode!=='first')this.viewHeading=heading;
@@ -405,7 +408,7 @@
       }else if(mode==='goal'){const a=star.heading+.5+(opts.stageTime||0)*.33;eye.set(star.x+4.6*Math.cos(a),1.42,star.z+4.6*Math.sin(a));aim.set(star.x,1.03,star.z);fov=39;
       }else if(mode==='replay'){const s=b.x>=0?1:-1;eye.set(s*49,6.9,Math.sign(b.z||1)*18);aim.set(b.x,Math.max(.85,b.y),b.z);fov=49;
       }else{const x=clamp(.68*b.x+.32*p.x,-42,42),z=clamp(.64*b.z+.36*p.z,-29,29);
-        eye.set(x*.92,21.8,z*.82+23.5);aim.set(x,.3,z-.6);}
+        eye.set(x*.95,20.5,z*.42+32.5);aim.set(x,.35,z*.75-.6);}
       const smooth=mode!==this.lastMode?1:smoothing(mode==='first'?25:6.8,dt);this.lastMode=mode;
       this.camera.position.lerp(eye,smooth);this.look.lerp(aim,smooth);this.camera.lookAt(this.look);
       if(this.camera.fov!==fov){this.camera.fov=fov;this.camera.updateProjectionMatrix();}
