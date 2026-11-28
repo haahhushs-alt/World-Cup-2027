@@ -7,12 +7,13 @@
    document.body.append(this.root);this.map=this.root.querySelector('canvas');this.ctx=this.map.getContext('2d');this.power=this.root.querySelector('.wc-power-meter');this.counter=0;
   }
   show(flag){this.root.hidden=!flag;if(!flag)this.power.hidden=true;}
-  begin(home,away){this.root.querySelector('.wc-fixture strong').textContent=home.name+'  —  '+away.name;this.intro=3.5;this.show(true);}
+  begin(home,away,mode){this.root.querySelector('.wc-fixture strong').textContent=home.name+'  —  '+away.name;this.intro=mode==='match'?2.1:0;this.show(true);}
   update(sim,dt){
-   if(this.root.hidden)return;this.intro=Math.max(0,this.intro-dt);this.root.querySelector('.wc-fixture').hidden=this.intro===0||['goal','replay'].includes(sim.phase);
-   const control=WC.controls,held=[...control.fingers.values()].find(v=>v.action==='shoot');
-   this.power.hidden=!held||sim.ball.owner!==sim.controlled;
-   if(held){const amount=Math.min(1,(performance.now()-held.started)/850);this.power.querySelector('i').style.width=(amount*100)+'%';}
+   if(this.root.hidden)return;this.root.dataset.cinematic=['goal','replay'].includes(sim.phase)?'on':'off';
+   this.intro=Math.max(0,this.intro-dt);this.root.querySelector('.wc-fixture').hidden=this.intro===0||this.root.dataset.cinematic==='on';
+   const charge=WC.controls.charging();
+   this.power.hidden=charge===null||WC.controls.profile()!=='attack'||!['live','restart'].includes(sim.phase);
+   if(!this.power.hidden)this.power.querySelector('i').style.width=(charge*100)+'%';
    this.counter+=dt;if(this.counter<.075)return;this.counter=0;
    const c=this.ctx;c.clearRect(0,0,340,220);c.fillStyle='rgba(8,18,29,.5)';c.fillRect(0,0,340,220);
    const x=v=>20+(v+52.5)/105*300,z=v=>14+(v+34)/68*192;

@@ -45,6 +45,9 @@
    else if(e.type==='post'){this.play('post',{pan});this.play('cheer',{bus:'crowd',volume:.35,rate:.9});}
    else if(e.type==='card')this.play('whistle',{volume:.65});
    else if(e.type==='receive')this.play('pass',{pan,volume:.27,rate:1.14});
+   else if(e.type==='dribble')this.play('dribble',{pan,volume:.26+e.speed*.025,rate:1.08-e.speed*.015+Math.random()*.06});
+   else if(e.type==='net')this.play('net',{pan,volume:.30+e.force*.44});
+   else if(e.type==='nearMiss')this.play('near-miss',{bus:'crowd',pan:pan*.4,volume:.66});
    else if(e.type==='tackle')this.play('tackle',{pan,volume:.55});
    else if(e.type==='bounce')this.play('bounce',{pan,volume:Math.min(.5,e.impact/12)});
   }

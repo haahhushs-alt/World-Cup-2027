@@ -23,6 +23,8 @@
     through:{up:'loftThrough',left:'powerThrough'},
     skill:{up:'stepover',down:'pullback',left:'skillLeft',right:'skillRight'}
   };
+  const shots=new Set(['shoot','chip','power','curve']);
+  const shotPower=started=>.48+.52*clamp((performance.now()-started)/760,0,1);
   const arrows = {up:'↑',down:'↓',left:'←',right:'→'};
   const keyMap = {KeyJ:'pass',KeyK:'shoot',KeyI:'through',KeyL:'skill',KeyU:'switch',KeyO:'highPass',KeyT:'tactic',KeyV:'camera',Escape:'pause',Space:'tackle'};
   const escapeHTML = value => String(value ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -96,7 +98,7 @@
         <div class="wc-beat" role="status"><small></small><strong></strong><span></span></div>
         <button type="button" class="wc-skip" data-cmd="skip" hidden>跳过 ›</button>
         <div class="wc-player-tag"><b></b><span></span></div>
-        <div class="wc-stick"><i></i><b></b></div>
+        <div class="wc-stick-area" aria-hidden="true"></div><div class="wc-stick"><i></i><b></b></div>
         <div class="wc-action-set">
           ${['shoot','pass','through','sprint','skill','switch'].map(type=>'<button type="button" data-touch="'+type+'" class="wc-act wc-act-'+type+'"><small></small><b>'+({sprint:'冲刺',pass:'传球',switch:'切人'}[type]||names[type])+'</b></button>').join('')}
         </div>
@@ -120,6 +122,7 @@
       if(this.method===s) return;
       this.method=s;this.root.dataset.method=s;
       if(s!=='touch') this.resetTouches();
+      if(s!=='pad')this.padShot=null;
     }
     installTouch() {
       const zone=this.refs.stick,tip=this.refs['swipe-preview'];
@@ -127,17 +130,24 @@
       pointer('pointerdown',e=>{
         if(this.dialog||!this.visible)return;
         this.pressMethod('touch');
-        const el=e.target.closest('[data-touch],.wc-stick');
+        const el=e.target.closest('[data-touch],.wc-stick,.wc-stick-area');
         if(!el)return;
         const action=el.dataset.touch || 'stick';
-        if(action==='sprint' && this.playerOwnsBall())this.dispatch('sprint');
         if(action==='stick' && [...this.fingers.values()].some(f=>f.action==='stick'))return;
         e.preventDefault(); el.setPointerCapture?.(e.pointerId);
-        const f={el,action,started:performance.now(),x:e.clientX,y:e.clientY,dir:'',radius:el.offsetWidth,def:action==='sprint'&&!this.playerOwnsBall()};
+        const f={el,action,started:performance.now(),x:e.clientX,y:e.clientY,dir:'',radius:el.offsetWidth};
         this.fingers.set(e.pointerId,f);
         el.classList.add('wc-pressed');
-        if(action==='stick') this.moveStick(e,zone);
-        if(action==='sprint' && f.def) this.dispatch('tackle');
+        if(action==='stick'){
+          if(el.classList.contains('wc-stick-area')){
+            const bounds=this.root.getBoundingClientRect(),half=zone.offsetWidth*.5;
+            zone.style.left=clamp(e.clientX-bounds.left-half,4,bounds.width*.45-half)+'px';
+            zone.style.top=clamp(e.clientY-bounds.top-half,bounds.height*.40,bounds.height-half*2-4)+'px';
+            zone.style.bottom='auto';
+          }
+          this.moveStick(e,zone);
+        }
+        if(action==='sprint')this.dispatch('sprint');
       });
       pointer('pointermove',e=>{
         const f=this.fingers.get(e.pointerId);if(!f)return;
@@ -161,7 +171,7 @@
         if(f.action==='stick'){this.resetStick();return;}
         if(cancelled || f.action==='sprint') return;
         const act=f.dir ? gestures[f.action]?.[f.dir] : f.action;
-        if(act){this.dispatch(act,f.action==='shoot'?Math.min(1,.48+(performance.now()-f.started)/1400):.65);if(f.dir)this.notify(names[act],800);}
+        if(act){this.dispatch(act,shots.has(act)?shotPower(f.started):.65);if(f.dir)this.notify(names[act],800);}
       };
       pointer('pointerup',e=>release(e,false));
       pointer('pointercancel',e=>release(e,true));
@@ -173,12 +183,20 @@
       const n=Math.max(1,Math.hypot(x,y));this.stick={x:x/n,y:y/n};
       el.style.setProperty('--sx',this.stick.x*radius+'px');el.style.setProperty('--sy',this.stick.y*radius+'px');
     }
-    resetStick(){this.stick={x:0,y:0};this.refs.stick.style.setProperty('--sx','0px');this.refs.stick.style.setProperty('--sy','0px');}
+    resetStick(){
+      this.stick={x:0,y:0};const style=this.refs.stick.style;
+      style.setProperty('--sx','0px');style.setProperty('--sy','0px');
+      for(const prop of ['left','top','bottom'])style.removeProperty(prop);
+    }
     resetTouches(){
       this.fingers.forEach(f=>f.el.classList.remove('wc-pressed'));this.fingers.clear();
       this.resetStick();this.refs['swipe-preview'].classList.remove('wc-on');
     }
-    clearInput(){this.resetTouches();this.keys.clear();this.heldSprint=false;}
+    clearInput(){this.resetTouches();this.keys.clear();this.heldSprint=false;this.padShot=null;}
+    charging(){
+      const hold=this.padShot||[...this.fingers.values()].find(f=>f.action==='shoot'&&f.dir!=='left');
+      return hold?clamp((performance.now()-hold.started)/760,0,1):null;
+    }
     keyEvent(e,down) {
       if(this.dialog){
         if(down && e.code==='Escape'){e.preventDefault();if(this.listening){this.listening='';this.paintSettings();}else this.closeSettings();}
@@ -193,7 +211,7 @@
     }
     dispatch(action,power=.65) {
       if(!this.visible || this.dialog || !action) return;
-      if(this.sim?.players[this.sim.ball.owner]?.team===1){if(action==='shoot')action='tackle';else if(action==='pass')action='switch';}
+      if(this.profile()==='defend'){if(action==='shoot')action='tackle';else if(action==='pass')action='switch';}
       if(action==='pause') this.cb.pause?.();
       else if(action==='camera') this.cb.camera?.();
       else if(action==='tactic'){
@@ -203,9 +221,9 @@
     }
     playerOwnsBall(){return this.sim?.ball?.owner===this.sim?.controlled;}
     profile() {
-      const p=this.sim?.players?.[this.sim?.ball?.owner];
       if(this.sim?.phase==='restart')return this.sim.restart?.team===1?'defend':'attack';
-      return p ? (p.team===1?'defend':'attack') : this.lastProfile||'attack';
+      const team=this.sim?.players?.[this.sim.ball.owner]?.team??this.sim?.kickData?.team;
+      return team===undefined?this.lastProfile||'attack':team===1?'defend':'attack';
     }
     poll() {
       if(native?.connected) this.readPad(native,true);
@@ -213,6 +231,9 @@
         let pad;try{pad=Array.from(navigator.getGamepads?.()||[]).find(p=>p?.connected);}catch{}
         this.readPad(pad||null,false);
       }
+      return this.movement();
+    }
+    movement(){
       if(!this.visible || this.dialog) return {x:0,y:0,sprint:false};
       let {x,y}=this.stick;
       if(this.method==='pad' && this.pad) {
@@ -237,7 +258,10 @@
       const releasedLT=this.previous['6']>.5 && !(values['6']>.5);
       this.previous=values;
       const axes=pad.axes||[],lx=axes[0]||0,ly=axes[1]||0;
-      if(fresh || edges.length || Math.hypot(lx,ly)>.28 || Math.hypot(axes[2]||0,axes[3]||0)>.55) this.pressMethod('pad');
+      const previousAxes=this.lastAxes||[0,0,0,0];
+      const moved=axes.some((value,index)=>Math.abs(value-(previousAxes[index]||0))>.045);
+      if(fresh || edges.length || moved&&(Math.hypot(lx,ly)>.28 || Math.hypot(axes[2]||0,axes[3]||0)>.55)) this.pressMethod('pad');
+      if(moved||fresh)this.lastAxes=Array.from(axes);
       if(fresh && this.dialog)this.paintSettings();
       const now=performance.now();
       if(this.dialog && this.listening){
@@ -268,13 +292,23 @@
       const profile=this.profile(),mapping=this.settings[profile];
       const chord=values['6']>.5;
       this.heldSprint=this.bindingHeld(mapping.sprint,values,mapping,chord);
+      if(this.padShot){
+        const held=this.padShot;
+        if(profile!=='attack'||this.sim?.controlled!==held.player||held.restart!==this.sim?.restartSerial||
+          !['live','restart'].includes(this.sim?.phase))this.padShot=null;
+        else if(!(values[held.key]>.5)){
+          this.padShot=null;
+          if(this.sim?.phase==='live'||this.sim?.phase==='restart')this.dispatch(held.action,shotPower(held.started));
+        }
+      }
       for(const key of edges){
         if(key==='6' && Object.values(mapping).some(b=>b.startsWith('6+')))continue;
         let act=Object.keys(mapping).find(a=>chord && mapping[a]==='6+'+key);
         if(!act) act=Object.keys(mapping).find(a=>mapping[a]===key);
         if(!act)continue;
-        if(act==='sprint'){if(!this.playerOwnsBall())this.dispatch('tackle');}
+        if(act==='sprint')this.dispatch('sprint');
         else if((this.sim?.phase==='goal'||this.sim?.phase==='replay') && key==='0')this.dispatch('skip');
+        else if(shots.has(act)&&profile==='attack')this.padShot={action:act,key,started:now,player:this.sim?.controlled,restart:this.sim?.restartSerial};
         else this.dispatch(act);
       }
       if(releasedLT && !this.usedChord) {
@@ -296,6 +330,7 @@
     }
     show(flag){
       this.visible=!!flag;this.root.hidden=!this.visible;this.clearInput();
+      this.root.dataset.cinematic='off';
       this.refs.beat.hidden=true;this.refs.skip.hidden=true;this.bannerKey='';
       if(!flag)this.refs.toast.classList.remove('wc-on');
     }
@@ -316,13 +351,14 @@
       const p=sim.players[sim.controlled],tag=r['player-tag'];
       if(p){set(tag.firstElementChild,String(p.number||''));set(tag.lastElementChild,p.name||'');}
       set(this.$('[data-touch="sprint"] b'),this.playerOwnsBall()?'冲刺':'冲刺 / 断球');
-      const owner=sim.players[sim.ball.owner],defending=owner?.team===1;
+      const defending=this.profile()==='defend';
       set(this.$('[data-touch="shoot"] b'),defending?'抢断':'射门');
       set(this.$('[data-touch="pass"] b'),defending?'切换':'传球');
       const phase=sim.phase;
+      this.root.dataset.cinematic=['goal','replay'].includes(phase)?'on':'off';
       const label=phase==='goal'?['GOAL','进球！']:phase==='replay'?['REPLAY','进球回放']:null;
       const key=label?phase:'';
-      if(key!==this.bannerKey){this.bannerKey=key;r.beat.hidden=!label;r.skip.hidden=!label;if(label){set(r.beat.children[0],label[0]);set(r.beat.children[1],label[1]);set(r.beat.children[2],r.result.textContent);}}
+      if(key!==this.bannerKey){this.bannerKey=key;r.beat.hidden=!label;r.skip.hidden=!label;if(label){set(r.beat.children[0],label[0]);set(r.beat.children[1],phase==='goal'?(sim.scorer?.name||label[1]):label[1]);set(r.beat.children[2],phase==='goal'?'进球　'+r.result.textContent:(sim.scorer?.name||''));}}
       if(this.method==='pad') {
         const map=this.settings[this.lastProfile],actions=this.lastProfile==='attack'?['pass','shoot','through','sprint']:['switch','tackle','sprint'];
         set(r['pad-help'],actions.map(a=>boundLabel(map[a])+' '+names[a]).join('    '));

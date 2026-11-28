@@ -6,7 +6,9 @@
   if (!T) throw new Error('Load Three.js before the player models');
   const TAU = Math.PI * 2;
   const white = '#ffffff';
-  const skins = ['#6c4032', '#d89d7d', '#a66548', '#edb299', '#83503e', '#bd876a', '#53352e', '#e3ae88'];
+  const skins = ['#714937','#ba826a','#bb8266','#c18b75'];
+  const faces=new Image();
+  faces.src=WC.faceAtlas;
   const hairs = ['#25201e', '#382722', '#15191c', '#674633', '#262025', '#3d3029', '#35251f'];
   const bootColors = ['#fc6948', '#cfeb59', '#eee9de', '#4bc8d0', '#242b3c', '#e993c8'];
   const colorCache = new Map();
@@ -29,7 +31,7 @@
   // radius, centre and colour to shape the jaw, muscles, tailoring and footwear.
   class Sculpt {
     constructor() {
-      this.positions = []; this.colors = []; this.indices = [];
+      this.positions = []; this.colors = []; this.indices = [];this.distant=[];
       this.weights = []; this.joints = []; this.uvs = [];
       this.bones = []; this.offsets = [];
     }
@@ -52,6 +54,14 @@
       return i;
     }
     // Rows are [y, radiusX, radiusZ, centreX, centreZ, optional colour].
+    distantGrid(start,rows,columns,wrap,rowStep,columnStep){
+      const width=wrap?columns:columns+1;
+      for(let row=0;row<rows-1;row+=rowStep)for(let col=0;col<columns;col+=columnStep){
+        const low=start+row*width,high=start+Math.min(rows-1,row+rowStep)*width;
+        const end=Math.min(col+columnStep,columns),next=wrap?end%columns:end;
+        this.distant.push(low+col,low+next,high+next,low+col,high+next,high+col);
+      }
+    }
     loft(bone, rows, shade, segments = 14) {
       const start = this.positions.length / 3;
       for (const [y, rx, rz, x=0, z=0, tint=shade] of rows) {
@@ -64,9 +74,22 @@
         const a=start+(r-1)*segments+s, b=start+(r-1)*segments+(s+1)%segments;
         this.indices.push(a,b,b+segments,a,b+segments,a+segments);
       }
-      for (let i=1; i<segments-1; i++) {
-        const last=start+(rows.length-1)*segments;
-        this.indices.push(start,start+i+1,start+i,last,last+i,last+i+1);
+      this.distantGrid(start,rows.length,segments,true,rows.length<5?1:2,2);
+      for(const row of [0,rows.length-1]){
+        const [y,rx,rz,x=0,z=0,tint=shade]=rows[row],cap=this.positions.length/3;
+        this.vertex(bone,x,y,z,tint);
+        for(let s=0;s<segments;s++){
+          const a=s*TAU/segments;
+          this.vertex(bone,x+Math.sin(a)*rx,y,z+Math.cos(a)*rz,tint);
+        }
+        for(let s=0;s<segments;s++){
+          const a=cap+1+s,b=cap+1+(s+1)%segments;
+          this.indices.push(cap,row?a:b,row?b:a);
+          if(s%2===0){
+            const next=cap+1+(Math.min(s+2,segments)%segments);
+            this.distant.push(cap,row?a:next,row?next:a);
+          }
+        }
       }
       return this;
     }
@@ -82,23 +105,40 @@
       const i=this.positions.length/3;
       for(let n=0;n<4;n++) this.vertex(bone,...points[n],shade,uv?.[n]);
       this.indices.push(i,i+1,i+2,i,i+2,i+3);
+      this.distant.push(i,i+1,i+2,i,i+2,i+3);
+    }
+    blendJoint(parent,child,radius){
+      const y=this.offsets[child][1];
+      for(let i=0;i<this.positions.length/3;i++){
+        const j=i*4,original=this.joints[j];
+        if(original!==parent&&original!==child)continue;
+        const offset=this.positions[i*3+1]-y;
+        if(Math.abs(offset)>=radius)continue;
+        const t=clamp(.5-offset/(2*radius),0,1),weight=t*t*(3-2*t);
+        this.joints[j]=parent;this.joints[j+1]=child;
+        this.weights[j]=1-weight;this.weights[j+1]=weight;
+      }
     }
     geometry() {
       const g=new T.BufferGeometry();
       for (const [name,data,size] of [['position',this.positions,3],['color',this.colors,3],['uv',this.uvs,2],['skinWeight',this.weights,4]]) {
         g.setAttribute(name,new T.Float32BufferAttribute(data,size));
       }
-      g.setAttribute('skinIndex',new T.Uint16BufferAttribute(this.joints,4)); g.setIndex(this.indices);
-      g.computeVertexNormals(); g.computeBoundingSphere();
+      g.setAttribute('skinIndex',new T.Uint16BufferAttribute(this.joints,4));
+      g.setIndex(this.indices);g.computeVertexNormals();
+      g.setIndex(this.indices.concat(this.distant));
+      g.userData.closeCount=this.indices.length;g.userData.farCount=this.distant.length;
+      g.setDrawRange(0,this.indices.length);
+      g.computeBoundingSphere();
       return g;
     }
   }
 
   // One canvas holds the shirt's front and back graphics. Neck trim and sleeve piping
   // are geometric so that the silhouette and trim are still readable under stadium lights.
-  function makeKit(number, name, kit, trim, team, keeper) {
-    const canvas=document.createElement('canvas'); canvas.width=512; canvas.height=256;
-    const ctx=canvas.getContext('2d'); ctx.fillStyle='white'; ctx.fillRect(0,0,512,256);
+  function makeKit(number, name, kit, trim, team, keeper, face, skin, hair, seed) {
+    const canvas=document.createElement('canvas'); canvas.width=1024; canvas.height=512;
+    const ctx=canvas.getContext('2d');ctx.save();ctx.fillStyle='white';ctx.fillRect(0,0,512,256);
     const ink = ncolor(kit).getHSL({h:0,s:0,l:0}).l > .52 ? '#15232a' : '#fff8db';
     for (let side=0; side<2; side++) {
       const x=side*240+12, y=8, w=228, h=240;
@@ -126,25 +166,91 @@
         ctx.font='900 127px sans-serif';ctx.fillText(String(number),x+w/2,y+178,w*.75);
         ctx.fillStyle=css(trim);ctx.fillRect(x+w/2-12,y+8,24,4);
       }
+      const textile=ctx.createLinearGradient(x,0,x+w,0);
+      textile.addColorStop(0,'rgba(8,18,25,.19)');textile.addColorStop(.20,'rgba(8,18,25,.025)');
+      textile.addColorStop(.55,'rgba(255,255,250,.035)');textile.addColorStop(1,'rgba(8,18,25,.16)');
+      ctx.fillStyle=textile;ctx.fillRect(x,y,w,h);
+      ctx.strokeStyle=mix(kit,trim,.31);ctx.lineWidth=1.7;
+      for(const edge of [-1,1]){
+        const start=x+w/2+edge*32;
+        ctx.beginPath();ctx.moveTo(start,y+2);ctx.quadraticCurveTo(start+edge*15,y+19,start+edge*74,y+29);ctx.stroke();
+      }
       ctx.restore();
     }
+    ctx.restore();
+    ctx.save();ctx.translate(512,0);ctx.fillStyle=hair;ctx.fillRect(0,0,512,256);
+    let bits=seed;
+    const random=()=>((bits=(Math.imul(bits,1664525)+1013904223)>>>0)/4294967296);
+    for(let i=0;i<2300;i++){
+      const x=random()*554-20,y=random()*282-12,length=5+random()*35;
+      const sweep=Math.sin(x*.016+y*.007+seed%7)*length*.46;
+      ctx.strokeStyle=random()<.56?'rgba(9,7,6,.29)':'rgba(230,201,162,.18)';
+      ctx.lineWidth=.45+random()*1.05;ctx.beginPath();ctx.moveTo(x,y);
+      ctx.quadraticCurveTo(x+sweep*.2,y+length*.48,x+sweep,y+length);ctx.stroke();
+    }
+    ctx.restore();
+    ctx.fillStyle=skin;ctx.fillRect(0,256,1024,256);
     const tex = new T.CanvasTexture(canvas);
+    const paintFace=()=>{
+      ctx.drawImage(faces,face%2*1024,Math.floor(face/2)*256,1024,256,0,256,1024,256);
+      tex.needsUpdate=true;
+    };
+    if(faces.complete&&faces.naturalWidth)paintFace();
+    else faces.addEventListener('load',paintFace,{once:true});
     tex.colorSpace=T.SRGBColorSpace;tex.anisotropy=2;
     return tex;
   }
-  function shirtPatch(g, bone, side) {
-    const levels=[[.027,.164,.093,-.001],[.095,.171,.101,-.001],[.211,.184,.115,.001],[.30,.197,.118,.008],[.37,.195,.113,.006]];
-    const angles=10;
-    for(let row=0;row<levels.length-1;row++) for(let s=0;s<angles;s++) {
-      const make=(r,c)=>{
-        const [y,rx,rz,cz]=levels[r], f=c/angles;
-        const a=(side?Math.PI:0)+(f-.5)*2.27;
-        const x=side?252:12;
-        return {p:[Math.sin(a)*(rx+.002),y,Math.cos(a)*(rz+.002)+cz],uv:[(x+1+f*226)/512,1-(247-(y-.027)/.343*237)/256]};
-      };
-      const corners=[make(row,s),make(row,s+1),make(row+1,s+1),make(row+1,s)];
-      g.quad(bone,corners.map(v=>v.p),white,corners.map(v=>v.uv));
+  function sculptShirt(g,bone){
+    const rows=[[-.018,.162,.104,-.001],[.003,.167,.106,-.001],[.035,.169,.108,0],
+      [.083,.164,.105,.001],[.133,.170,.109,.002],[.205,.183,.115,.004],
+      [.270,.195,.120,.008],[.330,.203,.120,.007],[.370,.198,.113,.006],
+      [.396,.180,.099,.002],[.421,.148,.083,.001],[.444,.080,.069,0]];
+    const count=28;
+    for(let side=0;side<2;side++){
+      const first=g.positions.length/3;
+      for(const [y,rx,rz,cz] of rows)for(let i=0;i<=count;i++){
+        const f=i/count,a=(side+f-.5)*Math.PI;
+        const fold=Math.sin(5*a+y*24)*.005*Math.max(0,1-y/.24);
+        const hem=Math.cos(2*a)*.010*Math.max(0,1-Math.abs(y)/.065);
+        const v=(y+.018)/.462;
+        g.vertex(bone,Math.sin(a)*(rx+fold),y+hem,Math.cos(a)*(rz+fold)+cz,white,
+          [((side?252:12)+1+f*226)/1024,1-(247-v*237)/512]);
+      }
+      for(let row=1;row<rows.length;row++)for(let i=0;i<count;i++){
+        const n=first+(row-1)*(count+1)+i;
+        g.indices.push(n,n+1,n+count+2,n,n+count+2,n+count+1);
+      }
+      g.distantGrid(first,rows.length,count,false,2,2);
     }
+  }
+  // The front surface carries the nose bridge, orbital hollows, cheeks and chin.
+  // Longitude matches our cylindrical face atlas. The UV seam sits at the nape.
+  function sculptHead(g,bone,width,seed){
+    const profile=[[0,.35,.040,.035],[.018,.65,.064,.023],[.054,.86,.083,.013],
+      [.090,.97,.096,.003],[.135,1,.103,0],[.165,1,.106,-.001],
+      [.200,.94,.099,-.003],[.232,.70,.078,-.003],[.258,.12,.025,-.004]];
+    const rows=40,cols=64,first=g.positions.length/3,nose=.021+(seed%9)*.001;
+    const ridge=(x,y,cx,cy,w,h)=>Math.exp(-(((x-cx)/w)**2+((y-cy)/h)**2));
+    let level=0;
+    for(let r=0;r<=rows;r++){
+      const y=.258*r/rows;
+      while(level<profile.length-2&&y>profile[level+1][0])level++;
+      const a=profile[level],b=profile[level+1],t=(y-a[0])/(b[0]-a[0]);
+      const interp=i=>a[i]+(b[i]-a[i])*t;
+      for(let s=0;s<=cols;s++){
+        const angle=(s/cols*2-1)*Math.PI,c=Math.cos(angle),x=Math.sin(angle)*width*interp(1),ax=Math.abs(x);
+        const detail=nose*ridge(x,y,0,.101,.015,.026)+.017*ridge(x,y,0,.126,.011,.038)
+          +.009*ridge(ax,y,.014,.092,.008,.008)-.009*ridge(ax,y,.033,.134,.018,.010)
+          +.009*ridge(ax,y,.045,.108,.026,.020)+.006*ridge(ax,y,.031,.151,.022,.008)
+          +.011*ridge(x,y,0,.052,.030,.012)+.011*ridge(x,y,0,.018,.031,.012);
+        g.vertex(bone,x,y,interp(3)+c*interp(2)+detail*Math.max(0,c)**3,white,[(1+s/cols*1022)/1024,(1+r/rows*254)/512]);
+      }
+    }
+    for(let r=0;r<rows;r++)for(let s=0;s<cols;s++){
+      const i=first+r*(cols+1)+s;
+      g.indices.push(i,i+1,i+cols+2,i,i+cols+2,i+cols+1);
+    }
+    g.distantGrid(first,rows+1,cols,false,4,4);
   }
   function labelFor(name) {
     const canvas=document.createElement('canvas'); canvas.width=512;canvas.height=96;
@@ -183,9 +289,9 @@
       const seed=this.seed;
       const kit=options.kitColor ?? (keeper?'#d79939':team?'#c9473c':'#286a7a');
       const trim=options.trimColor ?? (team?'#fff0d6':'#8ce1d7');
-      const skin=options.skin ?? choose(skins,seed), hair=choose(hairs,seed>>>4);
+      const face=(seed>>>9)%skins.length,skin=options.skin??skins[face],hair=choose(hairs,seed>>>4);
       const boot=choose(bootColors,seed>>>7);
-      const shorts=options.shortsColor ?? mix(kit,'#101d2c',.55);
+      const shorts=options.shortsColor ?? (ncolor(kit).getHSL({}).l>.55?'#1f403e':mix(kit,'#101d2c',.74));
       const skinShadow=mix(skin,'#452c35',.2);
       this.root=new T.Group(); this.root.name='Footballer '+this.name;
       this.body=new T.Group(); this.root.add(this.body);this.keeper=!!keeper;
@@ -194,39 +300,37 @@
       const chest=g.bone('spine',hips,0,.09,0);
       const head=g.bone('head',chest,0,.514,.003);
       this.hips=g.bones[hips];this.chest=g.bones[chest];this.head=g.bones[head];
-      g.loft(hips,[[-.087,.117,.08,0,-.008],[-.045,.17,.106],[.054,.164,.108],[.104,.153,.099]],shorts,16);
-      g.loft(chest,[[.002,.154,.096],[.027,.164,.093,0,-.001],[.095,.171,.101,0,-.001],[.211,.184,.115,0,.001],[.30,.197,.118,0,.008],[.37,.195,.113,0,.006],[.397,.185,.101],[.421,.153,.084],[.442,.08,.069]],kit,20);
-      shirtPatch(g,chest,0);shirtPatch(g,chest,1);
+      g.loft(hips,[[-.066,.131,.073,0,-.008],[-.034,.166,.104],[.054,.164,.108],[.104,.153,.099]],shorts,16);
+      sculptShirt(g,chest);
       g.loft(chest,[[.435,.083,.072],[.446,.080,.070],[.451,.077,.070]],trim,16);
       g.loft(chest,[[.441,.064,.061],[.479,.058,.055],[.543,.063,.055]],skin,14);
-      g.loft(chest,[[.005,.157,.098],[.015,.16,.097]],mix(kit,trim,.27),18);
       const faceWidth=.089+(seed%6)*.0015;
-      g.loft(head,[[.001,.036,.044,0,.029],[.019,faceWidth*.66,.074,0,.026],[.067,faceWidth*.91,.094,0,.005],[.112,faceWidth,.102,0,.001],[.168,faceWidth*.99,.105],[.207,faceWidth*.92,.097],[.237,faceWidth*.61,.073],[.25,.024,.033]],skin,20);
-      g.oval(head,0,.084,.101,.018,.028,.023,skin,10);
-      g.oval(head,0,.046,.100,.025,.005,.006,mix(skin,'#663c40',.27));
+      sculptHead(g,head,faceWidth,seed);
       for(const s of [-1,1]) {
-        g.oval(head,s*faceWidth,.098,-.001,.014,.028,.015,skinShadow);
-        g.oval(head,s*.038,.114,.094,.019,.007,.006,'#e5d5c4');
-        g.oval(head,s*.036,.114,.101,.008,.006,.003,'#302921');
-        g.oval(head,s*.039,.131,.092,.021,.005,.006,hair);
+        g.oval(head,s*faceWidth,.112,-.005,.016,.029,.018,skin);
+        g.oval(head,s*(faceWidth+.012),.114,-.004,.004,.017,.009,skinShadow);
+        g.oval(head,s*(faceWidth+.011),.096,.001,.005,.009,.008,skin);
       }
       // Hair has a shorter hairline at the forehead, longer at the ears and nape.
       const cut=seed%6;
       const hairColor=cut===5?mix(hair,'#c49e63',.35):hair;
-      const hairRows=5,segments=20,start=g.positions.length/3;
-      for(let r=0;r<hairRows;r++) for(let s=0;s<segments;s++){
+      const hairRows=12,segments=64,start=g.positions.length/3;
+      for(let r=0;r<hairRows;r++) for(let s=0;s<=segments;s++){
         const a=s*TAU/segments, front=Math.cos(a);
-        const base=.119+Math.max(front,0)*.051 + Math.min(front,0)*.042 + Math.sin(a*3+.8)*.007;
+        const base=.144+Math.max(front,0)*.042 + Math.min(front,0)*.062 + Math.sin(a*3+.8)*.007+Math.sin(a*21)*.002;
         const f=r/(hairRows-1), angle=f*Math.PI/2;
         const volume=cut===1?.038:cut===2?.027:cut===3?.012:.009;
         const y=base+Math.sin(angle)*(.249+volume-base)+(cut===1?Math.sin(a)*.018*(1-f):0);
+        const ridge=Math.cos(18*a+f*(cut===1?3.5:1.8))*(cut===5?.001:.0027);
         const scale=Math.max(.018, Math.cos(angle));
-        g.vertex(head,Math.sin(a)*(faceWidth+.006)*scale+Math.sin(angle)*(cut===1?.023:0),y,Math.cos(a)*.113*scale-.004,hairColor);
+        g.vertex(head,Math.sin(a)*(faceWidth+.010+ridge)*scale+Math.sin(angle)*(cut===1?.023:0),y+ridge*f,Math.cos(a)*(.119+ridge)*scale-.004,white,
+          [(513+510*s/segments)/1024,1-(254-f*252)/512]);
       }
       for(let r=1;r<hairRows;r++)for(let s=0;s<segments;s++){
-        const a=start+(r-1)*segments+s,b=start+(r-1)*segments+(s+1)%segments;
-        g.indices.push(a,b,b+segments,a,b+segments,a+segments);
+        const a=start+(r-1)*(segments+1)+s,b=a+1;
+        g.indices.push(a,b,b+segments+1,a,b+segments+1,a+segments+1);
       }
+      g.distantGrid(start,hairRows,segments,false,2,4);
       if (cut===2 || cut===4) for(let d=0;d<13;d++){
         const a=d*2.39996, rad=Math.sqrt((d+.5)/13)*.075;
         g.oval(head,Math.sin(a)*rad,.241+(.075-rad)*.33,Math.cos(a)*rad-.005,.032,.025,.035,hairColor,7,4);
@@ -247,6 +351,9 @@
         g.loft(fore,[[-.214,.024,.024],[-.162,.033,.035],[-.08,.046,.047],[-.027,.046,.042],[.018,.041,.038]],skin);
         if(keeper || (seed>>>8)%3===1) g.loft(fore,[[-.214,.033,.031],[-.188,.032,.033]],keeper?trim:'#f2eee6',10);
         g.oval(fore,0,-.239,.005,keeper?.047:.032,.057,keeper?.036:.027,keeper?trim:skin);
+        if(!keeper)for(let f=0;f<4;f++){
+          g.oval(fore,(f-1.5)*.013,-.278+Math.abs(f-1)*.004,.010,.007,.027,.009,skin,7,4);
+        }
         g.oval(fore,-sign*.021,-.23,.023,.014,.025,.012,keeper?trim:skin);
         g.loft(thigh,[[-.39,.053,.05,sign*.008,.009],[-.314,.069,.069,sign*.008,.008],[-.22,.082,.087,sign*.006],[-.098,.087,.096],[0,.081,.083]],skin,14);
         g.loft(thigh,[[-.203,.083,.088,sign*.005,.001],[-.175,.091,.098,sign*.005,.001],[-.066,.096,.102],[-.009,.092,.102],[.035,.081,.086]],shorts,14);
@@ -258,19 +365,30 @@
         g.loft(shin,[[-.097,.061,.068,0,-.011],[-.086,.061,.065,0,-.01]],trim);
         g.loft(foot,[[-.053,.054,.108,0,.052],[-.042,.061,.122,0,.049],[-.024,.06,.121,0,.047],[.003,.052,.103,0,.035],[.038,.041,.059,0,.001]],boot,16);
         g.loft(foot,[[-.057,.056,.111,0,.050],[-.048,.061,.121,0,.049]],'#242b32');
-        for(let l=0;l<3;l++)g.oval(foot,0,.019-l*.006,.055+l*.017,.026,.003,.004,'#e0e6da',8,3);
+        for(let l=0;l<4;l++){
+          const z=.040+l*.017,y=.029-l*.004;
+          for(const s of [-1,1])g.quad(foot,[[s*.025,y-.002,z],[s*.025,y-.002,z+.004],[-s*.021,y+.003,z+.017],[-s*.021,y+.003,z+.013]],'#e8e5d9');
+        }
+        for(const s of [-1,1])for(const z of [-.028,.071,.125])
+          g.loft(foot,[[-.068,.007,.009,s*.035,z],[-.055,.010,.012,s*.035,z]],'#c6b99b',6);
+        g.loft(foot,[[-.013,.043,.030,0,-.025],[.018,.039,.026,0,-.024],[.034,.033,.020,0,-.02]],mix(boot,trim,.47),12);
+        if(keeper)for(let digit=0;digit<4;digit++){
+          g.oval(fore,(digit-1.5)*.016,-.28+Math.abs(digit-1.4)*.006,.012,.009,.030,.013,trim,7,4);
+        }
+        g.blendJoint(arm,fore,.055);g.blendJoint(thigh,shin,.077);
       }
-      const tex=makeKit(number,this.name,kit,trim,team,keeper);
+      const tex=makeKit(number,this.name,kit,trim,team,keeper,face,skin,hairColor,seed);
       const material=new T.MeshStandardMaterial({map:tex,vertexColors:true,roughness:.7,metalness:.015});
       const mesh=new T.SkinnedMesh(g.geometry(),material);this.mesh=mesh;
-      mesh.add(this.hips);mesh.bind(new T.Skeleton(g.bones));mesh.frustumCulled=false;
+      mesh.add(this.hips);mesh.bind(new T.Skeleton(g.bones));
+      mesh.boundingSphere=new T.Sphere(new T.Vector3(0,.95,0),1.55);
       mesh.castShadow=true;mesh.receiveShadow=true;this.body.add(mesh);
       const height=.98+(seed%13)*.004, build=.98+((seed>>>4)%13)*.009;
       this.body.scale.set(build,height,build);
       this.ring=buildRing();this.nameTag=labelFor(this.name);
       this.root.add(this.ring,this.nameTag);this.ring.visible=false;this.nameTag.visible=false;
-      this.lastTime=null;this.cycle=(seed%101)/101*TAU;this.heading=0;this.lastKick=false;this.kickStarted=-5;
-      this.turnWasSet=false;this.wasSelected=false;
+      this.lastTime=null;this.cycle=(seed%101)/101*TAU;this.heading=0;
+      this.turnWasSet=false;
     }
     update(state={}) {
       const t=state.time ?? 0, rawDelta=t-(this.lastTime??t), dt=clamp(rawDelta,0,.06);
@@ -279,6 +397,8 @@
       const action=state.anim||'', selected=!!state.selected;
       this.root.visible=state.active!==false;
       if (!this.root.visible) return;
+      const geometry=this.mesh.geometry,{closeCount,farCount}=geometry.userData;
+      geometry.setDrawRange(state.distant?closeCount:0,state.distant?farCount:closeCount);
       this.root.position.set(state.x??0,0,state.z??0);
       const angle=state.heading??this.heading;
       const turn=Math.atan2(Math.sin(angle-this.heading),Math.cos(angle-this.heading));
@@ -293,36 +413,45 @@
       if(hidden)return;
       const celebrate=!!state.celebrate||action==='celebrate', dive=action==='dive', tackle=action==='tackle';
       const throwing=action==='throw', skill=action==='skill', kickFlag=!!state.kick||action==='kick';
-      if(kickFlag&&!this.lastKick)this.kickStarted=t;
-      this.lastKick=kickFlag;
-      const k=clamp((t-this.kickStarted)/.44,0,1);
-      const kick=k<.33?Math.sin(k/.33*Math.PI/2)*.68:Math.cos((k-.33)/.67*Math.PI/2)*.68-Math.sin((k-.33)/.67*Math.PI)*1.35;
+      const k=kickFlag?clamp(1-(state.animTime??.36)/.36,0,1):1;
+      const drive=['power','shoot','curve'].includes(state.kickStyle),chip=state.kickStyle==='chip';
+      const kick=k>=1?0:-(.55+(drive?.79:chip?.46:.29)*Math.sin(Math.PI*Math.min(1,k*2.4)))*(1-k);
       const idle=Math.sin(t*2+(this.seed%17));
       this.body.position.y=celebrate?Math.max(0,Math.sin(t*4.8))*.12:0;
       if(rawDelta<0 || rawDelta>.3)this.cycle=t*(5+sp*.95)+(this.seed%17);
-      this.cycle+=dt*(4.8+Math.min(sp,10)*1.09);
-      const stride=Math.sin(this.cycle), bounce=(1-Math.abs(Math.cos(this.cycle)))*.034*run;
+      if(Number.isFinite(state.stride))this.cycle=state.stride;
+      else this.cycle+=dt*(4.8+Math.min(sp,10)*1.09);
+      const stride=Math.sin(this.cycle), bounce=(1-Math.abs(stride))*.034*run;
       const diveAmount=dive?Math.sin(clamp((state.animTime??.3)/.8,0,1)*Math.PI):0;
-      this.hips.position.y=.874+bounce+idle*.003*(1-run)-(tackle?.19:0);
+      this.hips.position.y=.859+bounce-.047*run+idle*.003*(1-run)-(tackle?.19:0);
       this.hips.rotation.set(.05*run, stride*.074*run,diveAmount*1.28);
-      this.chest.rotation.set(.035+run*.13-(celebrate?.15:0),-stride*.13*run+(skill?.34*Math.sin(10*t):0),-stride*.036*run);
+      this.chest.rotation.set(.035+run*.13-(celebrate?.15:0),-stride*.13*run+(skill?.34*Math.sin(10*t):0),-stride*.036*run+(state.lean||0));
       this.head.rotation.set(-this.chest.rotation.x*.7,-this.chest.rotation.y*.85+Math.sin(t*1.7)*.055,0);
       for (const limb of this.limbs) {
         const {sign,arm,fore,thigh,shin,foot}=limb;
-        const wave=sign*stride, recover=Math.max(0,-sign*Math.cos(this.cycle));
-        thigh.rotation.set(-wave*(.55+.33*sprint)*run-.07,0,sign*.025);
-        shin.rotation.x=(.11+.75*recover*run+.32*recover*sprint);
-        foot.rotation.x=-shin.rotation.x*.52-.02;
+        const wave=sign*stride,swing=Math.max(0,sign*Math.cos(this.cycle));
+        const ankleY=.064+run*swing*swing*(.115+.11*sprint);
+        const down=this.hips.position.y-.035-ankleY,forward=wave*run*(.165+.11*sprint);
+        const knee=Math.acos(clamp((down*down+forward*forward-.375**2-.392**2)/(2*.375*.392),-.98,.998));
+        const hip=-Math.atan2(forward,down)-Math.atan2(.392*Math.sin(knee),.375+.392*Math.cos(knee));
+        thigh.rotation.set(hip,0,sign*.022);
+        shin.rotation.x=knee;foot.rotation.x=-hip-knee+run*swing*.27;
         arm.rotation.set(wave*(.37+.22*sprint)*run+.035,0,sign*(.16+run*.10));
         fore.rotation.set(-.16-.89*run,0,-sign*.11);
-        if(sign===1 && k<1) {thigh.rotation.x+=kick*1.19;shin.rotation.x+=Math.max(0,kick)*1.5;}
+        if(k<1){
+          if(sign===1){thigh.rotation.x+=kick;shin.rotation.x*=.28+.72*k;foot.rotation.x+=chip?-.26:drive?.19:-.08;thigh.rotation.y+=state.kickStyle==='curve'?(1-k)*.4:0;}
+          arm.rotation.z+=sign*(1-k)*(drive?.58:.29);
+        }
         if(tackle) {thigh.rotation.x=sign===1?-1.16:-.42;shin.rotation.x=sign===1?.11:1.22;arm.rotation.z=sign*.55;}
         if(skill) {thigh.rotation.z+=sign*.16*Math.sin(12*t);thigh.rotation.x-=Math.max(0,wave)*.33;}
         if(dive) {arm.rotation.z=sign*(1.2+diveAmount*.8);fore.rotation.x=-.23;thigh.rotation.x=sign*.4;}
         if(throwing){arm.rotation.x=-2.62;arm.rotation.z=sign*.15;fore.rotation.x=-.86;}
         if(celebrate) {
-          arm.rotation.z=sign*(this.number%2?1.15+.28*Math.sin(t*4.8+sign):2.1+.16*Math.sin(t*4.8));arm.rotation.x=-.36;
-          fore.rotation.x=-.37;this.head.rotation.x=-.19;this.chest.rotation.z=Math.sin(t*3.3)*.045;
+          const strong=sign===(this.number%2?1:-1),pump=.5+.5*Math.sin(t*5.4);
+          arm.rotation.z=sign*(strong?1.78+.28*pump:.54+.13*pump);
+          arm.rotation.x=strong?-.66:-.36;
+          fore.rotation.x=strong?-1.35+.34*pump:-.81;
+          this.head.rotation.x=-.07;this.chest.rotation.z=Math.sin(t*3.3)*.045;
         }
       }
     }

@@ -2,11 +2,12 @@ from pathlib import Path
 import numpy as np
 from scipy.signal import butter,sosfilt
 from scipy.io.wavfile import write
-import subprocess,base64,json
+import subprocess,base64,json,tempfile
 ROOT=Path(__file__).resolve().parents[1]
 import os
 os.chdir(ROOT)
-Path('work/check').mkdir(parents=True,exist_ok=True)
+scratch=tempfile.TemporaryDirectory()
+wav=Path(scratch.name)/'sample.wav'
 sr=24000;rng=np.random.default_rng(2027);out=Path('game/audio');out.mkdir(parents=True,exist_ok=True)
 def noise(n,lo=80,hi=6000):
  x=rng.normal(size=n);return sosfilt(butter(3,[lo,hi],fs=sr,btype='bandpass',output='sos'),x)
@@ -21,8 +22,8 @@ def stereo(x):
  return np.stack([x,np.roll(x,83)*.89+np.roll(x,1407)*.11],axis=1)
 def save(name,x,peak=.8):
  x=stereo(x);x=x/max(np.max(np.abs(x)),.01)*peak
- write('work/check/sample.wav',sr,(x*32767).astype('int16'))
- subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y','-i','work/check/sample.wav','-c:a','libmp3lame','-b:a','96k',str(out/(name+'.mp3'))],check=True)
+ write(wav,sr,(x*32767).astype('int16'))
+ subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y','-i',str(wav),'-c:a','libmp3lame','-b:a','96k',str(out/(name+'.mp3'))],check=True)
 def impact(duration,freq,decay,bite):
  t=np.arange(int(duration*sr))/sr
  return echo(np.sin(2*np.pi*(freq*t-45*t*t))*np.exp(-decay*t)+noise(len(t),100,6500)*np.exp(-90*t)*bite)
@@ -77,7 +78,23 @@ for i in range(32):
  note=root*[1,1.5,2,1.25,1.5,1,2,1.5][i%8];music+=env*(np.sin(2*np.pi*note*a)+.17*np.sin(2*np.pi*note*2*a))*.18
 save('music',music,.72)
 t=np.arange(int(sr*.13))/sr;save('ui',np.sin(2*np.pi*(880*t+1800*t*t))*np.exp(-t*38),.25)
+# Close boot contact, then a separate nylon mesh impact and crowd reaction to a narrow miss.
+t=np.arange(int(sr*.18))/sr
+save('dribble',np.sin(2*np.pi*(151*t-190*t*t))*np.exp(-44*t)+noise(len(t),350,2100)*np.exp(-110*t)*.34,.38)
+t=np.arange(int(sr*.61))/sr
+net=noise(len(t),760,5600)*np.exp(-t*18)*.7
+for start in [.008,.024,.047,.086,.122]:
+ u=np.maximum(t-start,0)
+ net+=(t>=start)*np.sin(2*np.pi*(rng.uniform(220,530)*u-55*u*u))*np.exp(-19*u)*.21
+save('net',echo(net),.68)
+t=np.arange(int(sr*1.85))/sr
+breath=np.minimum(t/.23,1)*np.exp(-t*1.9)*np.clip((1.85-t)/.3,0,1)
+sigh=noise(len(t),210,2800)*.42
+for f in rng.uniform(105,255,44):
+ phase=2*np.pi*f*(t-.065*t*t)+rng.uniform(0,6)
+ sigh+=(np.sin(phase)+.54*np.sin(2*phase)+.3*np.sin(3*phase))*.046
+save('near-miss',echo(sigh*breath),.62)
 # Embed the decoded-source bytes for file:// WKWebView without network or fetch.
-assets={p.stem:base64.b64encode(p.read_bytes()).decode() for p in out.glob('*.mp3')}
+assets={p.stem:base64.b64encode(p.read_bytes()).decode() for p in sorted(out.glob('*.mp3'))}
 Path('game/audio-data.js').write_text('window.WC=window.WC||{};WC.audioData='+json.dumps(assets,separators=(',',':'))+';\n')
 print({k:round(len(v)*.75/1024) for k,v in assets.items()})

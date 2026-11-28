@@ -21,3 +21,12 @@
 .wc-act{background:linear-gradient(140deg,#1d4268c9,#071828d9);border:1px solid #e0f3ff85;font-size:clamp(12px,1.35vw,18px);box-shadow:inset 0 0 0 3px #d7eeff10,0 4px 12px #0004;text-shadow:0 1px 3px #00111e}
 .wc-act-shoot{background:linear-gradient(140deg,#2a78acdf,#12365ee6);border-color:#a8e1ff!important}.wc-act-pass{background:linear-gradient(140deg,#30755adf,#13382de6)}.wc-act-through{background:linear-gradient(140deg,#987b34df,#45391ae6)}.wc-act-sprint{background:linear-gradient(140deg,#6a6386df,#2f2c49e6)}
 .wc-overlay .wc-beat{border-top:0;border-left:4px solid #63cbff;background:linear-gradient(110deg,#061a30f0,#123354ed);box-shadow:0 8px 40px #0005}.wc-beat small{color:#71d5ff}.wc-top-actions button{background:#0a2134c9;border-color:#c0d9ed44}
+.wc-toast{top:11%;bottom:auto;height:fit-content;white-space:nowrap}
+.wc-swipe-preview{left:auto;right:7%;top:auto;bottom:33%;transform:none}
+.wc-overlay[data-cinematic=on] :is(.wc-action-set,.wc-stick,.wc-player-tag,.wc-pad-help,.wc-top-actions,.wc-swipe-preview,.wc-toast),.wc-broadcast[data-cinematic=on] .wc-radar{display:none}
+.wc-overlay .wc-beat{left:3%;top:auto;bottom:8%;transform:none;text-align:left;padding:12px 36px 12px 16px;min-width:150px;background:linear-gradient(105deg,#081b2ef7,#112b3edb);border-left:3px solid #a3e7dd}
+.wc-beat strong{font-size:clamp(23px,3vw,44px);letter-spacing:-.025em}.wc-beat span{font-size:13px;color:#deeaf0;margin-top:3px}
+.wc-skip{left:auto;right:3%;top:auto;bottom:8%;transform:none}
+.wc-stick-area{position:absolute;left:0;bottom:0;width:45%;height:52%;pointer-events:auto;touch-action:none}
+.wc-overlay[data-cinematic=on] .wc-stick-area{display:none}
+.wc-stick-area.wc-pressed{background:transparent!important}
